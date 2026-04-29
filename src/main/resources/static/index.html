@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Student Portal</title>
+    <!--<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"  -->
+    <!-- Bootstrap CSS -->
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    integrity="sha384-9ndCyUa0R0Y2h4uJv8bM5a7U6aS3rI7q+0fupS8chnwAqVV9YBGLgVS7PsQFZq3e" crossorigin="anonymous">
+  </head>
+  <body class="bg-light">
+    <nav class="navbar navbar-dark bg-dark shadow-sm">
+      <div class="container">
+        <a class="navbar-brand fw-bold" href="#">Student Portal</a>
+      </div>
+    </nav>
+
+    <main class="container py-5">
+      <div class="row justify-content-center">
+        <div class="col-xl-10">
+          <div class="row g-4">
+            <div class="col-lg-5">
+              <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                  <h4 class="card-title mb-3">Add Student</h4>
+                  <p class="text-muted mb-4">Enter student details below to add a new record.</p>
+                  <form id="student-form">
+                    <div class="mb-3">
+                      <label for="name" class="form-label">Name</label>
+                      <input type="text" class="form-control rounded-3" id="name" placeholder="Enter name" required>
+                    </div>
+                    <div class="mb-3">
+                      <label for="email" class="form-label">Email</label>
+                      <input type="email" class="form-control rounded-3" id="email" placeholder="Enter email" required>
+                    </div>
+                    <div class="mb-3">
+                      <label for="course" class="form-label">Course</label>
+                      <input type="text" class="form-control rounded-3" id="course" placeholder="Enter course" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary rounded-pill px-4">Submit</button>
+                    <button type="button" class="btn btn-secondary rounded-pill px-4 ms-2" id="cancel-edit" style="display:none;">Cancel</button>
+                    <div id="form-feedback" class="form-text text-success mt-3" style="display:none;"></div>
+                  </form>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-lg-7">
+              <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                  <div class="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center mb-3">
+                    <div>
+                      <h4 class="card-title mb-1">Student List</h4>
+                      <p class="text-muted mb-0">Live records from the backend API.</p>
+                    </div>
+                  </div>
+                  <div class="table-responsive">
+                    <table class="table table-striped table-hover table-bordered align-middle" id="students-table">
+                      <thead class="table-dark">
+                        <tr>
+                          <th>ID</th>
+                          <th>Name</th>
+                          <th>Email</th>
+                          <th>Course</th>
+                          <th>Action</th>
+                        </tr>
+                      </thead>
+                      <tbody id="students-body"></tbody>
+                    </table>
+                  </div>
+                  <div id="empty-state" class="alert alert-info mb-0" role="alert" style="display:none;">
+                    No students have been added yet.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <script>
+      const apiUrl = '/students';
+      const form = document.getElementById('student-form');
+      const feedback = document.getElementById('form-feedback');
+      const studentsBody = document.getElementById('students-body');
+      const emptyState = document.getElementById('empty-state');
+      const cancelEdit = document.getElementById('cancel-edit');
+      const submitButton = form.querySelector('button[type="submit"]');
+      const formTitle = form.closest('.card-body').querySelector('.card-title');
+      let editStudentId = null;
+
+      async function fetchStudents() {
+        try {
+          const response = await fetch(apiUrl);
+          if (!response.ok) {
+            throw new Error('Failed to load students');
+          }
+          const students = await response.json();
+          renderStudents(students);
+        } catch (error) {
+          studentsBody.innerHTML = '';
+          emptyState.style.display = 'block';
+          emptyState.textContent = 'Unable to load student data.';
+        }
+      }
+
+      function renderStudents(students) {
+        studentsBody.innerHTML = '';
+        if (!Array.isArray(students) || students.length === 0) {
+          emptyState.style.display = 'block';
+          emptyState.textContent = 'No students have been added yet.';
+          return;
+        }
+
+        emptyState.style.display = 'none';
+        students.forEach(student => {
+          const row = document.createElement('tr');
+          row.innerHTML = `
+            <td>${student.id || ''}</td>
+            <td>${student.name || ''}</td>
+            <td>${student.email || ''}</td>
+            <td>${student.course || ''}</td>
+            <td>
+              <button class="btn btn-sm btn-outline-secondary me-2" type="button">Edit</button>
+              <button class="btn btn-sm btn-outline-danger" type="button">Delete</button>
+            </td>
+          `;
+          const [editButton, deleteButton] = row.querySelectorAll('button');
+          editButton.addEventListener('click', () => startEdit(student));
+          deleteButton.addEventListener('click', () => deleteStudent(student.id));
+          studentsBody.appendChild(row);
+        });
+      }
+
+      async function submitStudent(event) {
+        event.preventDefault();
+        const student = {
+          name: document.getElementById('name').value.trim(),
+          email: document.getElementById('email').value.trim(),
+          course: document.getElementById('course').value.trim()
+        };
+
+        if (!student.name || !student.email || !student.course) {
+          feedback.style.display = 'block';
+          feedback.textContent = 'Please complete all fields before submitting.';
+          feedback.className = 'form-text text-danger mt-2';
+          return;
+        }
+
+        try {
+          const method = editStudentId ? 'PUT' : 'POST';
+          const url = editStudentId ? `${apiUrl}/${editStudentId}` : apiUrl;
+          const response = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(student)
+          });
+          if (!response.ok) {
+            throw new Error('Unable to save student');
+          }
+          resetForm();
+          form.reset();
+          feedback.className = 'form-text text-success mt-2';
+          feedback.textContent = editStudentId ? 'Student updated successfully!' : 'Student added successfully!';
+          feedback.style.display = 'block';
+          fetchStudents();
+        } catch (error) {
+          feedback.className = 'form-text text-danger mt-2';
+          feedback.textContent = editStudentId ? 'Error updating student. Please try again.' : 'Error saving student. Please try again.';
+          feedback.style.display = 'block';
+        }
+      }
+
+      function startEdit(student) {
+        editStudentId = student.id;
+        document.getElementById('name').value = student.name || '';
+        document.getElementById('email').value = student.email || '';
+        document.getElementById('course').value = student.course || '';
+        submitButton.textContent = 'Update';
+        cancelEdit.style.display = 'inline-block';
+        formTitle.textContent = 'Edit Student';
+        feedback.style.display = 'none';
+      }
+
+      function resetForm() {
+        editStudentId = null;
+        submitButton.textContent = 'Submit';
+        cancelEdit.style.display = 'none';
+        formTitle.textContent = 'Add Student';
+      }
+
+      cancelEdit.addEventListener('click', () => {
+        resetForm();
+        form.reset();
+        feedback.style.display = 'none';
+      });
+
+      async function deleteStudent(id) {
+        if (!confirm('Delete this student?')) {
+          return;
+        }
+        try {
+          const response = await fetch(`${apiUrl}/${id}`, { method: 'DELETE' });
+          if (!response.ok) {
+            throw new Error('Failed to delete student');
+          }
+          if (editStudentId === id) {
+            resetForm();
+            form.reset();
+          }
+          fetchStudents();
+        } catch (error) {
+          alert('Could not delete student. Please refresh and try again.');
+        }
+      }
+
+      form.addEventListener('submit', submitStudent);
+      window.addEventListener('load', fetchStudents);
+    </script>
+  </body>
+</html>
